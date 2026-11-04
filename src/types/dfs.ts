@@ -89,6 +89,8 @@ export interface SlateData {
   matchups: MatchupVulnerability[];
   sources: GroundingSource[];
   rawTextSummary: string;
+  nextGameNotice?: string;
+  hasGamesToday?: boolean;
 }
 
 export type AlertUrgency = 'STANDARD' | 'HIGH' | 'CRITICAL_PRE_LOCK';

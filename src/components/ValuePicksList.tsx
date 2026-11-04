@@ -12,6 +12,18 @@ export const ValuePicksList: React.FC<ValuePicksListProps> = ({ picks, sport }) 
   const [selectedPosition, setSelectedPosition] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  if (picks.length === 0) {
+    return (
+      <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-8 text-center text-slate-400 space-y-2">
+        <ShieldAlert className="w-8 h-8 text-slate-600 mx-auto" />
+        <h4 className="text-sm font-bold text-slate-300">No DFS Value Picks Available</h4>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          No games are scheduled for this league today on the official ESPN scoreboard. Player value picks and projections only generate when live games are on today's schedule.
+        </p>
+      </div>
+    );
+  }
+
   // Extract unique positions
   const positions = ['ALL', ...Array.from(new Set(picks.map((p) => p.position)))];
 

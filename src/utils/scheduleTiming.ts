@@ -88,14 +88,14 @@ export function computeAdaptiveRefreshSchedule(
 ): ScheduleTimingResult {
   if (!games || games.length === 0) {
     return {
-      intervalSeconds: 60,
-      intervalLabel: '1 Min',
-      mode: 'ACTIVE_SLATE_1MIN',
+      intervalSeconds: 300,
+      intervalLabel: '5 Min',
+      mode: 'PRE_GAME_5MIN',
       earliestGame: null,
       latestGame: null,
-      statusDescription: 'No scheduled games detected; maintaining 1-minute auto-refresh.',
+      statusDescription: 'No games scheduled today on ESPN scoreboard. Refreshing every 5 minutes.',
       thirtyMinsBeforeEarliest: null,
-      isInActionWindow: true,
+      isInActionWindow: false,
       minutesUntilFirstGame: null,
     };
   }

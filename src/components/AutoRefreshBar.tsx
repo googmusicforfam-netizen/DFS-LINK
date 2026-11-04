@@ -160,7 +160,7 @@ export const AutoRefreshBar: React.FC<AutoRefreshBarProps> = ({
                 )}
               </>
             ) : (
-              'Reading schedule start times...'
+              <span>{timing.statusDescription || 'No games scheduled today on official ESPN scoreboard.'}</span>
             )}
           </span>
         </div>

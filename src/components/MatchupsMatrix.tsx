@@ -9,8 +9,12 @@ interface MatchupsMatrixProps {
 export const MatchupsMatrix: React.FC<MatchupsMatrixProps> = ({ matchups }) => {
   if (matchups.length === 0) {
     return (
-      <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-4 text-center text-slate-400 text-xs">
-        No extreme defensive vulnerabilities flagged for this slate.
+      <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-8 text-center text-slate-400 space-y-2">
+        <ShieldAlert className="w-8 h-8 text-slate-600 mx-auto" />
+        <h4 className="text-sm font-bold text-slate-300">No Defensive Vulnerabilities Flagged</h4>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          No games are scheduled for this league today on the official ESPN scoreboard. Defensive targets only generate when live games are on today's schedule.
+        </p>
       </div>
     );
   }

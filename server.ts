@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { FALLBACK_SLATES } from './src/data/fallbackSlates.ts';
 import { INITIAL_INJURY_ALERTS, DYNAMIC_INJURY_POOL } from './src/data/fallbackInjuries.ts';
+import { fetchEspnSlate, fetchTodayGameCounts } from './src/services/espnService.ts';
 import type { SlateData, Sport, GroundingSource, InjuryAlert } from './src/types/dfs.ts';
 
 dotenv.config();
@@ -32,14 +33,9 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
-// In-memory cache for live grounded slates to keep responses snappy (30-minute TTL)
+// In-memory cache for live ESPN slates to keep responses snappy (45-second TTL)
 const slateCache = new Map<string, { timestamp: number; data: SlateData }>();
-const CACHE_TTL_MS = 30 * 60 * 1000;
-
-// Pre-seed cache with initial curated consensus slates so first loads do not burn rate limit
-for (const [sportKey, slate] of Object.entries(FALLBACK_SLATES)) {
-  slateCache.set(sportKey, { timestamp: Date.now(), data: slate });
-}
+const CACHE_TTL_MS = 45 * 1000;
 
 // Global rate-limit cooldown tracker to protect against 429 RESOURCE_EXHAUSTED
 let rateLimitedUntil = 0;
@@ -64,7 +60,24 @@ const SPORT_NAMES: Record<Sport, string> = {
   cbb: 'College Basketball',
 };
 
-// Fetch slate with Google Search Grounding from free sources
+// Get today's actual game counts across all 6 leagues from ESPN
+app.get('/api/dfs/schedule-overview', async (_req: Request, res: Response) => {
+  try {
+    const gameCounts = await fetchTodayGameCounts();
+    res.json({
+      gameCounts,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error fetching schedule overview:', error);
+    res.json({
+      gameCounts: { nba: 0, nfl: 0, nhl: 0, cbb: 0, cfb: 0, mlb: 0 },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Fetch today's real schedule, Vegas lines, and DFS picks directly from ESPN Public Scoreboard API
 app.get('/api/dfs/slate', async (req: Request, res: Response) => {
   const sportParam = (req.query.sport as string)?.toLowerCase() as Sport;
   const forceRefresh = req.query.refresh === 'true';
@@ -79,212 +92,81 @@ app.get('/api/dfs/slate', async (req: Request, res: Response) => {
     second: '2-digit',
   });
 
-  // Return cached slate if not force-refreshing, or if currently in a rate-limit cooldown
+  // Return cached slate if within TTL and not forcing refresh
   if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     const updatedData: SlateData = {
       ...cached.data,
-      lastUpdated: `Updated at ${currentTime} (Consensus Sync)`,
+      lastUpdated: `Updated at ${currentTime} (ESPN Scoreboard)`,
     };
     res.json(updatedData);
     return;
   }
 
-  const baseSlate = cached?.data || FALLBACK_SLATES[sport];
-
-  // If currently in rate-limit cooldown, return cached/base slate with clear note
-  if (Date.now() < rateLimitedUntil) {
-    const cooldownSecondsLeft = Math.ceil((rateLimitedUntil - Date.now()) / 1000);
-    const slateWithNotice: SlateData = {
-      ...baseSlate,
-      lastUpdated: 'Curated Vegas Consensus (Live Search on Cooldown)',
-      slateNote: `${baseSlate.slateNote} (Google Search grounding quota on cooldown for ${cooldownSecondsLeft}s. Serving curated Vegas lines).`,
-    };
-    res.json(slateWithNotice);
-    return;
-  }
-
-  if (!ai) {
-    // If no API key configured yet, return rich curated fallback slate with clear note
-    const fallbackWithNote: SlateData = {
-      ...baseSlate,
-      lastUpdated: 'Curated Vegas & DFS Consensus Lines',
-      slateNote: `${baseSlate.slateNote} (Connect Gemini API Key in Settings for live real-time web search grounding).`,
-    };
-    res.json(fallbackWithNote);
-    return;
-  }
-
   try {
-    const todayStr = new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    // 1. Fetch real games directly from ESPN public scoreboard
+    const espnSlate = await fetchEspnSlate(sport);
 
-    const prompt = `You are an elite Daily Fantasy Sports (DFS) analyst and Vegas sports betting researcher.
-Today's date is ${todayStr}.
-Analyze the upcoming schedule and slate for: ${SPORT_NAMES[sport]} (${sport.toUpperCase()}).
+    // 2. If league has NO games today (e.g. NFL on a Wednesday, MLB in off-season):
+    // Strictly return empty games, empty valuePicks, empty matchups, and next game notice.
+    // Zero made-up games or fake player picks!
+    if (espnSlate.games.length === 0) {
+      slateCache.set(cacheKey, { timestamp: Date.now(), data: espnSlate });
+      res.json(espnSlate);
+      return;
+    }
 
-Search free sports websites such as ESPN, SportsLine, Rotowire DFS, FantasyFuel, official league pages, and Reddit r/dfsports discussions.
-Never assume or reference paid APIs.
+    // 3. If league HAS games today:
+    // If Gemini AI is available, force-refresh was clicked, and not rate-limited,
+    // optionally enhance the narrative note or search for breaking news on today's teams.
+    if (ai && forceRefresh && Date.now() >= rateLimitedUntil) {
+      try {
+        const activeMatchups = espnSlate.games
+          .map((g) => `${g.awayTeam.abbreviation} @ ${g.homeTeam.abbreviation} (Vegas: ${g.spread.text}, O/U: ${g.overUnder})`)
+          .join('\n');
 
-Extract the following information:
-1. Scheduled games with exact Vegas Spread (favorite team and points line, e.g. "BOS -6.5", "KC -3.5") and Over/Under total points (e.g. 231.5 or 48.5).
-2. Top value picks and sleeper plays for DFS (players with low salaries on DraftKings/FanDuel who project for high points-per-dollar value or benefit from recent injuries/lineup changes).
-3. Easiest matchups and defense vulnerabilities (identify teams that bleed fantasy points to specific positions, e.g. bottom-5 defense vs Point Guards, soft secondary, high pace matchup).
-4. A clean, copyable text summary for mobile users so they can copy and paste it into their DFS apps.
+        const prompt = `Today's official ESPN ${SPORT_NAMES[sport]} schedule has ${espnSlate.games.length} games:
+${activeMatchups}
 
-Output your response strictly as valid JSON enclosed in \`\`\`json ... \`\`\` code block matching this schema:
+Provide a concise 1-2 sentence DFS slate summary highlighting pace spots, highest game totals, and key injury spots.
+Output JSON:
 {
-  "slateNote": "string summarizing today's slate environment, key injury pivots, or pace spots",
-  "games": [
-    {
-      "id": "string",
-      "awayTeam": { "name": "Team Name", "abbreviation": "ABC", "record": "12-4" },
-      "homeTeam": { "name": "Team Name", "abbreviation": "XYZ", "record": "10-6" },
-      "gameTime": "7:00 PM ET",
-      "status": "Scheduled",
-      "spread": { "favorite": "XYZ", "line": -4.5, "text": "XYZ -4.5" },
-      "overUnder": 228.5,
-      "impliedAwayScore": 112.0,
-      "impliedHomeScore": 116.5,
-      "paceFactor": "High",
-      "stackRating": 5,
-      "weatherNote": "string or null",
-      "keyNotes": "analysis note on matchup and pace"
-    }
-  ],
-  "valuePicks": [
-    {
-      "id": "string",
-      "playerName": "Player Name",
-      "team": "XYZ",
-      "opponent": "vs ABC",
-      "position": "PG or WR or C",
-      "salaryDK": 4500,
-      "salaryFD": 5200,
-      "projectedPoints": 28.5,
-      "valueMultiplier": 6.3,
-      "tier": "Smash Lock",
-      "matchupGrade": "A+",
-      "defenseRankAgainstPos": 28,
-      "analysis": "detailed explanation of why this player is high value",
-      "injuryImpact": "optional note on injury beneficiary"
-    }
-  ],
-  "matchups": [
-    {
-      "id": "string",
-      "targetTeam": "Team with weak defense",
-      "opponentTeam": "Opponent",
-      "position": "Position targeted (e.g. PG, RB, Center)",
-      "defenseRank": 29,
-      "pointsAllowedStat": "Stat showing defense vulnerability",
-      "reason": "Why defense is weak",
-      "beneficiaryPlayers": ["Player 1", "Player 2"],
-      "paceRating": "Very Fast"
-    }
-  ],
-  "rawTextSummary": "Clean, formatted plain-text cheat sheet ready for 1-tap mobile copying."
+  "slateNote": "concise slate overview mentioning only teams playing today"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+        const aiResponse = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
 
-    const responseText = response.text || '';
-
-    // Extract Grounding Chunks if present
-    const rawChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const extractedSources: GroundingSource[] = [];
-
-    for (const chunk of rawChunks) {
-      if (chunk.web && chunk.web.uri) {
-        try {
-          const urlObj = new URL(chunk.web.uri);
-          extractedSources.push({
-            title: chunk.web.title || urlObj.hostname.replace('www.', ''),
-            uri: chunk.web.uri,
-            domain: urlObj.hostname.replace('www.', ''),
-          });
-        } catch {
-          extractedSources.push({
-            title: chunk.web.title || 'Sports Source',
-            uri: chunk.web.uri,
-            domain: 'Web Grounding',
-          });
+        const parsed = JSON.parse(aiResponse.text || '{}');
+        if (parsed.slateNote) {
+          espnSlate.slateNote = `${espnSlate.games.length}-Game ESPN Slate. ${parsed.slateNote}`;
         }
+      } catch (aiErr: any) {
+        if (aiErr?.status === 'RESOURCE_EXHAUSTED' || String(aiErr).includes('429')) {
+          rateLimitedUntil = Date.now() + 60 * 1000;
+        }
+        // Seamlessly continue with standard ESPN slate data
       }
     }
 
-    // Attempt to parse JSON from the response text
-    let parsedData: Partial<SlateData> | null = null;
-    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    const jsonStringToParse = jsonMatch ? jsonMatch[1] : responseText;
+    // Cache and return real ESPN slate
+    slateCache.set(cacheKey, { timestamp: Date.now(), data: espnSlate });
+    res.json(espnSlate);
+  } catch (error) {
+    console.error(`Error loading ESPN slate for ${sport}:`, error);
 
-    try {
-      parsedData = JSON.parse(jsonStringToParse);
-    } catch {
-      // Try to find the first { and last }
-      const firstBrace = responseText.indexOf('{');
-      const lastBrace = responseText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        try {
-          parsedData = JSON.parse(responseText.slice(firstBrace, lastBrace + 1));
-        } catch {
-          // Parsing failed, will use structured fallback with AI summary
-        }
-      }
+    // If ESPN call failed, use cached or fallback if available
+    if (cached) {
+      res.json(cached.data);
+      return;
     }
 
-    const finalSlate: SlateData = {
-      sport,
-      sportName: SPORT_NAMES[sport],
-      dateStr: todayStr,
-      lastUpdated: 'Live via Google Search Grounding',
-      slateNote: parsedData?.slateNote || baseSlate.slateNote,
-      games: parsedData?.games && parsedData.games.length > 0 ? parsedData.games : baseSlate.games,
-      valuePicks: parsedData?.valuePicks && parsedData.valuePicks.length > 0 ? parsedData.valuePicks : baseSlate.valuePicks,
-      matchups: parsedData?.matchups && parsedData.matchups.length > 0 ? parsedData.matchups : baseSlate.matchups,
-      sources: extractedSources.length > 0 ? extractedSources : baseSlate.sources,
-      rawTextSummary: parsedData?.rawTextSummary || baseSlate.rawTextSummary,
-    };
-
-    // Cache result
-    slateCache.set(cacheKey, { timestamp: Date.now(), data: finalSlate });
-    res.json(finalSlate);
-  } catch (error: unknown) {
-    const err = error as { status?: string; message?: string };
-    const errorMsg = err?.message || String(error);
-    const isRateLimit =
-      err?.status === 'RESOURCE_EXHAUSTED' ||
-      errorMsg.includes('429') ||
-      errorMsg.includes('quota') ||
-      errorMsg.includes('RESOURCE_EXHAUSTED');
-
-    if (isRateLimit) {
-      rateLimitedUntil = Date.now() + 60 * 1000;
-      console.warn('Gemini Search Grounding rate limit reached (429). Activating 60s cooldown.');
-    } else {
-      console.warn('Live grounding notice:', errorMsg.slice(0, 200));
-    }
-
-    // Return base slate with clear notice rather than throwing or failing
-    const fallbackWithNotice: SlateData = {
-      ...baseSlate,
-      lastUpdated: isRateLimit
-        ? 'Curated Vegas Consensus (Live Search on Cooldown)'
-        : 'Curated Vegas Consensus Lines',
-      slateNote: isRateLimit
-        ? `${baseSlate.slateNote} (Google Search grounding quota temporarily exceeded. Serving curated consensus lines. Upgrade key in Settings > Secrets for higher quota).`
-        : `${baseSlate.slateNote} (Serving curated consensus lines).`,
-    };
-    res.json(fallbackWithNotice);
+    const fallback = FALLBACK_SLATES[sport];
+    res.json(fallback);
   }
 });
 

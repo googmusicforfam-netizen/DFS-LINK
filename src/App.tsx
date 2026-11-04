@@ -92,7 +92,31 @@ export default function App() {
     pollInjuries,
   } = useInjuryPoller(currentSport);
 
-  // Fetch slate from backend with search grounding
+  // Game counts from ESPN scoreboard for today
+  const [todayGameCounts, setTodayGameCounts] = useState<Record<Sport, number>>({
+    nba: 14,
+    nfl: 0,
+    nhl: 4,
+    cbb: 26,
+    cfb: 3,
+    mlb: 0,
+  });
+
+  const fetchScheduleOverview = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dfs/schedule-overview');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.gameCounts) {
+          setTodayGameCounts(data.gameCounts);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Fetch slate from backend with ESPN scoreboard
   const fetchSlate = useCallback(
     async (sport: Sport, forceRefresh: boolean = false) => {
       setIsLoading(true);
@@ -102,6 +126,7 @@ export default function App() {
         if (response.ok) {
           const data: SlateData = await response.json();
           setSlates((prev) => ({ ...prev, [sport]: data }));
+          setTodayGameCounts((prev) => ({ ...prev, [sport]: data.games.length }));
           if (forceRefresh) {
             soundManager.playChime(587.33, 880.0);
           }
@@ -115,6 +140,12 @@ export default function App() {
     []
   );
 
+  // Initial load: fetch overview and initial ESPN slate
+  useEffect(() => {
+    fetchScheduleOverview();
+    fetchSlate('nba', false);
+  }, [fetchScheduleOverview, fetchSlate]);
+
   // Unified auto-refresh runner: refetches sports slate, injuries & lineups without page reload
   const runAutoRefresh = useCallback(
     async (forceLive: boolean = false) => {
@@ -122,6 +153,7 @@ export default function App() {
       try {
         await Promise.allSettled([
           fetchSlate(currentSport, forceLive),
+          fetchScheduleOverview(),
           pollInjuries(),
         ]);
         const nowStr = new Date().toLocaleTimeString('en-US', {
@@ -135,7 +167,7 @@ export default function App() {
         setIsAutoRefreshing(false);
       }
     },
-    [currentSport, fetchSlate, pollInjuries, scheduleTiming.intervalSeconds]
+    [currentSport, fetchSlate, fetchScheduleOverview, pollInjuries, scheduleTiming.intervalSeconds]
   );
 
   // Adaptive Auto-Refresh Countdown Loop:
@@ -164,6 +196,7 @@ export default function App() {
   const handleSelectSport = (sport: Sport) => {
     setCurrentSport(sport);
     setSearchQuery('');
+    fetchSlate(sport, false);
   };
 
   // Quick copy active slate summary
@@ -266,14 +299,7 @@ export default function App() {
       <SportTabs
         currentSport={currentSport}
         onSelectSport={handleSelectSport}
-        gameCounts={{
-          nba: FALLBACK_SLATES.nba.games.length,
-          nfl: FALLBACK_SLATES.nfl.games.length,
-          nhl: FALLBACK_SLATES.nhl.games.length,
-          cbb: FALLBACK_SLATES.cbb.games.length,
-          cfb: FALLBACK_SLATES.cfb.games.length,
-          mlb: FALLBACK_SLATES.mlb.games.length,
-        }}
+        gameCounts={todayGameCounts}
       />
 
       {/* Main Container */}
@@ -377,9 +403,9 @@ export default function App() {
                 Top Game Total
               </span>
               <span className="text-sm sm:text-base font-extrabold text-amber-300 truncate block">
-                {highestTotalGame
+                {highestTotalGame && highestTotalGame.overUnder > 0
                   ? `O/U ${highestTotalGame.overUnder}`
-                  : 'N/A'}
+                  : 'Off Today'}
               </span>
             </div>
           </div>
@@ -394,7 +420,7 @@ export default function App() {
                 Top Value Lock
               </span>
               <span className="text-sm sm:text-base font-extrabold text-emerald-400 truncate block">
-                {topValuePick ? `${topValuePick.playerName} (${topValuePick.valueMultiplier}x)` : 'N/A'}
+                {topValuePick ? `${topValuePick.playerName} (${topValuePick.valueMultiplier}x)` : 'No Slate'}
               </span>
             </div>
           </div>
@@ -511,25 +537,104 @@ export default function App() {
         {/* View Section 1: Games & Vegas Odds */}
         {activeTab === 'games' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-              <span>
-                Showing {filteredGames.length} of {slateData.games.length} games scheduled
-              </span>
-              <span className="text-[11px] text-emerald-400 font-mono">
-                Consensus Vegas Spreads & Implied Totals
-              </span>
-            </div>
+            {slateData.games.length === 0 ? (
+              <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 sm:p-8 text-center space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-center mx-auto text-slate-400">
+                  <Calendar className="w-6 h-6 text-slate-400" />
+                </div>
+                <div className="space-y-1.5 max-w-lg mx-auto">
+                  <h3 className="text-base sm:text-lg font-extrabold text-white">
+                    No {slateData.sportName} Games Scheduled Today
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    ESPN's official public scoreboard reports 0 games scheduled for today ({slateData.dateStr}).
+                    DFS value picks, spreads, totals, and player projections only generate for leagues with live games on today's schedule.
+                  </p>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {filteredGames.map((game) => (
-                <GameCard key={game.id} game={game} />
-              ))}
-            </div>
+                {slateData.nextGameNotice && (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-500/10 border border-blue-500/25 text-xs text-blue-300 font-medium">
+                    <Clock className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span>{slateData.nextGameNotice}</span>
+                  </div>
+                )}
 
-            {filteredGames.length === 0 && (
-              <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-8 text-center text-slate-400 text-xs">
-                No games match your search query "{searchQuery}".
+                {/* Quick switcher to active slates */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2.5">
+                    Switch to Leagues With Games Today:
+                  </span>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    {todayGameCounts.nba > 0 && (
+                      <button
+                        onClick={() => handleSelectSport('nba')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>🏀 NBA</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-200 text-[10px]">
+                          {todayGameCounts.nba} Games
+                        </span>
+                      </button>
+                    )}
+                    {todayGameCounts.cbb > 0 && (
+                      <button
+                        onClick={() => handleSelectSport('cbb')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>⛹️ College Basketball</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-200 text-[10px]">
+                          {todayGameCounts.cbb} Games
+                        </span>
+                      </button>
+                    )}
+                    {todayGameCounts.nhl > 0 && (
+                      <button
+                        onClick={() => handleSelectSport('nhl')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>🏒 NHL</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-200 text-[10px]">
+                          {todayGameCounts.nhl} Games
+                        </span>
+                      </button>
+                    )}
+                    {todayGameCounts.cfb > 0 && (
+                      <button
+                        onClick={() => handleSelectSport('cfb')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <span>🏈 College Football</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-200 text-[10px]">
+                          {todayGameCounts.cfb} Games
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                  <span>
+                    Showing {filteredGames.length} of {slateData.games.length} games scheduled
+                  </span>
+                  <span className="text-[11px] text-emerald-400 font-mono">
+                    Consensus Vegas Spreads & Implied Totals
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredGames.map((game) => (
+                    <GameCard key={game.id} game={game} />
+                  ))}
+                </div>
+
+                {filteredGames.length === 0 && (
+                  <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-8 text-center text-slate-400 text-xs">
+                    No games match your search query "{searchQuery}".
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
