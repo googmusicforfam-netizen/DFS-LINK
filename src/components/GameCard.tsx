@@ -139,6 +139,73 @@ export const GameCard: React.FC<GameCardProps> = ({ game }) => {
         )}
       </div>
 
+      {/* Starting Lineups Section */}
+      {game.startingLineups && (
+        <div className="mt-2.5 pt-2 border-t border-slate-700/60 space-y-1.5 text-xs">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+            <span className="flex items-center gap-1 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Starting Lineups
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {game.startingLineups.away.status === 'Confirmed' && game.startingLineups.home.status === 'Confirmed'
+                ? 'Both Lineups Confirmed'
+                : 'Projected / Active Warmups'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            {/* Away Lineup */}
+            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-700/40">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-slate-200">{game.awayTeam.abbreviation} Lineup</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                    game.startingLineups.away.status === 'Confirmed'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-amber-500/20 text-amber-300'
+                  }`}
+                >
+                  {game.startingLineups.away.status}
+                </span>
+              </div>
+              <p className="text-slate-300 leading-snug">
+                {game.startingLineups.away.starters.join(', ')}
+              </p>
+              {game.startingLineups.away.keyNote && (
+                <span className="block text-[10px] text-amber-300/90 mt-1 font-medium">
+                  {game.startingLineups.away.keyNote}
+                </span>
+              )}
+            </div>
+
+            {/* Home Lineup */}
+            <div className="bg-slate-900/70 p-2 rounded-lg border border-slate-700/40">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-slate-200">{game.homeTeam.abbreviation} Lineup</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                    game.startingLineups.home.status === 'Confirmed'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-amber-500/20 text-amber-300'
+                  }`}
+                >
+                  {game.startingLineups.home.status}
+                </span>
+              </div>
+              <p className="text-slate-300 leading-snug">
+                {game.startingLineups.home.starters.join(', ')}
+              </p>
+              {game.startingLineups.home.keyNote && (
+                <span className="block text-[10px] text-amber-300/90 mt-1 font-medium">
+                  {game.startingLineups.home.keyNote}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Additional game notes / weather / stack rating */}
       {(game.keyNotes || game.weatherNote || game.stackRating) && (
         <div className="mt-2.5 pt-2 border-t border-slate-700/50 flex flex-col gap-1.5 text-[11px]">

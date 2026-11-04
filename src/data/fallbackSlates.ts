@@ -22,6 +22,18 @@ export const FALLBACK_SLATES: Record<Sport, SlateData> = {
         paceFactor: 'Very High',
         stackRating: 5,
         keyNotes: 'Highest total on the board (242.5). Both teams rank top 5 in pace and bottom 10 in defensive rating.',
+        startingLineups: {
+          away: {
+            status: 'Confirmed',
+            starters: ['T. Haliburton (GTD)', 'A. Nembhard', 'A. Nesmith', 'P. Siakam', 'M. Turner'],
+            keyNote: 'Haliburton warmups test; McConnell ready for spot start',
+          },
+          home: {
+            status: 'Confirmed',
+            starters: ['T. Young', 'D. Daniels', 'J. Johnson', 'Z. Risacher', 'C. Capela'],
+            keyNote: 'Okongwu in line for heavy 4th quarter minutes',
+          },
+        },
       },
       {
         id: 'nba-2',
@@ -37,6 +49,17 @@ export const FALLBACK_SLATES: Record<Sport, SlateData> = {
         paceFactor: 'High',
         stackRating: 4,
         keyNotes: 'Blowout risk (-11.5), but Celtics starters have massive ceiling vs Hornets 28th ranked defense.',
+        startingLineups: {
+          away: {
+            status: 'Confirmed',
+            starters: ['J. Holiday (Q)', 'D. White', 'J. Brown', 'J. Tatum', 'A. Horford'],
+            keyNote: 'Pritchard in line for 28+ minutes if Holiday sits',
+          },
+          home: {
+            status: 'Projected',
+            starters: ['L. Ball', 'B. Miller', 'J. Green', 'M. Bridges', 'N. Richards'],
+          },
+        },
       },
       {
         id: 'nba-3',

@@ -13,6 +13,12 @@ export interface GameSpread {
   text: string; // e.g. "BOS -6.5"
 }
 
+export interface TeamLineup {
+  status: 'Confirmed' | 'Projected';
+  starters: string[];
+  keyNote?: string;
+}
+
 export interface Game {
   id: string;
   sport: Sport;
@@ -28,6 +34,10 @@ export interface Game {
   stackRating?: number; // 1 to 5 stars
   weatherNote?: string;
   keyNotes?: string;
+  startingLineups?: {
+    away: TeamLineup;
+    home: TeamLineup;
+  };
 }
 
 export type ValueTier = 'Smash Lock' | 'High Value' | 'Salary Saver' | 'Tournament GPP Sleeper';
@@ -79,4 +89,36 @@ export interface SlateData {
   matchups: MatchupVulnerability[];
   sources: GroundingSource[];
   rawTextSummary: string;
+}
+
+export type AlertUrgency = 'STANDARD' | 'HIGH' | 'CRITICAL_PRE_LOCK';
+
+export interface BeneficiaryPlayer {
+  name: string;
+  position: string;
+  team: string;
+  role: 'New Starter' | 'Next Man Up' | 'Usage Monster' | 'Expanded Minutes' | 'Punt Salary Saver';
+  projectedMinutes?: string; // e.g. "32-35 mins (+11)"
+  salaryDK?: number;
+  salaryFD?: number;
+  dfsImpactNote: string; // e.g. "Takes over primary playmaking; 28% projected usage"
+}
+
+export interface InjuryAlert {
+  id: string;
+  sport: Sport;
+  sportName: string;
+  playerOut: string;
+  team: string;
+  teamAbbr: string;
+  position: string;
+  injuryDetail: string; // e.g. "Left hamstring strain"
+  officialStatus: 'OUT' | 'LATE SCRATCH' | 'INACTIVE' | 'DNP';
+  gameMatchup: string; // e.g. "IND @ ATL"
+  gameTime: string; // e.g. "7:30 PM ET"
+  minutesToStart: number; // minutes before start time (e.g. 7 = last 10 mins pre-lock!)
+  timestamp: string; // e.g. "7:18 PM ET"
+  createdAt: number;
+  urgency: AlertUrgency;
+  fillIns: BeneficiaryPlayer[];
 }

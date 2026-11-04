@@ -7,6 +7,8 @@ interface HeaderProps {
   isLoading: boolean;
   onOpenPasteModal: () => void;
   onOpenCopyBoard: () => void;
+  onOpenAlertsLog: () => void;
+  unreadAlertsCount: number;
   lastUpdated: string;
 }
 
@@ -15,6 +17,8 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   onOpenPasteModal,
   onOpenCopyBoard,
+  onOpenAlertsLog,
+  unreadAlertsCount,
   lastUpdated,
 }) => {
   const [soundOn, setSoundOn] = useState(soundManager.isEnabled());
@@ -55,6 +59,26 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Injury Wire Alert Log button */}
+            <button
+              onClick={onOpenAlertsLog}
+              title="View recent injury and inactive alerts log"
+              aria-label="View injury alerts"
+              className="relative px-2.5 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 border border-rose-500/50"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+              </span>
+              <span className="hidden sm:inline">Injury Wire</span>
+              <span className="sm:hidden">Injuries</span>
+              {unreadAlertsCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-white text-rose-700">
+                  {unreadAlertsCount}
+                </span>
+              )}
+            </button>
+
             {/* Put text on screen / Paste button */}
             <button
               onClick={onOpenPasteModal}
@@ -63,8 +87,8 @@ export const Header: React.FC<HeaderProps> = ({
               className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors active:scale-95"
             >
               <FileText className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Paste Slate</span>
-              <span className="sm:hidden">Paste</span>
+              <span className="hidden md:inline">Paste Slate</span>
+              <span className="md:hidden">Paste</span>
             </button>
 
             {/* View Full Copy Screen button */}

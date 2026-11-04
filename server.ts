@@ -5,7 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { FALLBACK_SLATES } from './src/data/fallbackSlates.ts';
-import type { SlateData, Sport, GroundingSource } from './src/types/dfs.ts';
+import { INITIAL_INJURY_ALERTS, DYNAMIC_INJURY_POOL } from './src/data/fallbackInjuries.ts';
+import type { SlateData, Sport, GroundingSource, InjuryAlert } from './src/types/dfs.ts';
 
 dotenv.config();
 
@@ -72,9 +73,19 @@ app.get('/api/dfs/slate', async (req: Request, res: Response) => {
   const cacheKey = sport;
   const cached = slateCache.get(cacheKey);
 
+  const currentTime = new Date().toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
   // Return cached slate if not force-refreshing, or if currently in a rate-limit cooldown
   if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    res.json(cached.data);
+    const updatedData: SlateData = {
+      ...cached.data,
+      lastUpdated: `Updated at ${currentTime} (Consensus Sync)`,
+    };
+    res.json(updatedData);
     return;
   }
 
@@ -369,6 +380,87 @@ Output JSON:
       copyableCleanText: rawText.trim(),
     });
   }
+});
+
+// Injury Alerts state in memory
+let activeInjuryAlerts: InjuryAlert[] = [...INITIAL_INJURY_ALERTS];
+
+// GET /api/dfs/injuries - Retrieve current injury alerts & pre-lock status
+app.get('/api/dfs/injuries', (req: Request, res: Response) => {
+  const sportParam = (req.query.sport as string)?.toLowerCase() as Sport | undefined;
+  
+  let alerts = [...activeInjuryAlerts];
+  if (sportParam && ['nba', 'nfl', 'mlb', 'nhl', 'cfb', 'cbb'].includes(sportParam)) {
+    alerts = alerts.filter(a => a.sport === sportParam);
+  }
+
+  // Sort newest first
+  alerts.sort((a, b) => b.createdAt - a.createdAt);
+
+  // Check if any game is within the last 10 minutes of start time
+  const hasCriticalPreLock = alerts.some(a => a.minutesToStart <= 10 && a.minutesToStart > 0);
+
+  res.json({
+    alerts,
+    totalCount: alerts.length,
+    hasCriticalPreLock,
+    recommendedPollIntervalMs: hasCriticalPreLock ? 10000 : 45000, // 10s if within 10m before game!
+    lastChecked: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  });
+});
+
+// GET /api/dfs/injuries/poll - Polling for newly added alerts since a timestamp
+app.get('/api/dfs/injuries/poll', (req: Request, res: Response) => {
+  const since = Number(req.query.since) || 0;
+  const sportParam = (req.query.sport as string)?.toLowerCase() as Sport | undefined;
+
+  let newAlerts = activeInjuryAlerts.filter(a => a.createdAt > since);
+  if (sportParam && ['nba', 'nfl', 'mlb', 'nhl', 'cfb', 'cbb'].includes(sportParam)) {
+    newAlerts = newAlerts.filter(a => a.sport === sportParam);
+  }
+
+  newAlerts.sort((a, b) => b.createdAt - a.createdAt);
+
+  const hasCriticalPreLock = activeInjuryAlerts.some(a => a.minutesToStart <= 10 && a.minutesToStart > 0);
+
+  res.json({
+    newAlerts,
+    hasNew: newAlerts.length > 0,
+    hasCriticalPreLock,
+    recommendedPollIntervalMs: hasCriticalPreLock ? 10000 : 45000,
+    serverTimestamp: Date.now(),
+  });
+});
+
+// POST /api/dfs/injuries/simulate - Trigger a simulated or breaking OUT alert
+app.post('/api/dfs/injuries/simulate', (req: Request, res: Response) => {
+  const requestedSport = (req.body.sport as Sport) || 'nba';
+  const sport = ['nba', 'nfl', 'mlb', 'nhl', 'cfb', 'cbb'].includes(requestedSport) ? requestedSport : 'nba';
+
+  const pool = DYNAMIC_INJURY_POOL[sport] || DYNAMIC_INJURY_POOL.nba;
+  const template = pool[Math.floor(Math.random() * pool.length)];
+
+  const now = Date.now();
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  // Generate unique simulated alert
+  const newAlert: InjuryAlert = {
+    ...template,
+    id: `inj-sim-${sport}-${now}`,
+    timestamp: timeStr,
+    createdAt: now,
+    minutesToStart: Math.floor(Math.random() * 8) + 3, // 3 to 10 minutes before tip-off/kickoff!
+    urgency: 'CRITICAL_PRE_LOCK',
+  };
+
+  // Prepend to active alerts
+  activeInjuryAlerts = [newAlert, ...activeInjuryAlerts.slice(0, 40)];
+
+  res.json({
+    success: true,
+    alert: newAlert,
+    message: `Breaking alert triggered: ${newAlert.playerOut} is RULED OUT!`,
+  });
 });
 
 // Setup Vite in Dev or serve Static in Production
