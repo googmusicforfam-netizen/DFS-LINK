@@ -1,0 +1,6 @@
+{
+  "name": "Daily DFS Edge - Matchups, Spreads & Value Picks",
+  "description": "Daily fantasy sports helper with Vegas spreads, over/unders, easiest defensive matchups, and top value plays across NBA, NFL, MLB, NHL, CFB, and CBB.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
