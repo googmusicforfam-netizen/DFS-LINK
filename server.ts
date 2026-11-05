@@ -8,6 +8,7 @@ import { FALLBACK_SLATES } from './src/data/fallbackSlates.ts';
 import { INITIAL_INJURY_ALERTS, DYNAMIC_INJURY_POOL } from './src/data/fallbackInjuries.ts';
 import { fetchEspnSlate, fetchTodayGameCounts } from './src/services/espnService.ts';
 import { extractBeneficiariesFromAlerts, filterBeneficiariesBySport, getBeneficiaryCountsBySport } from './src/utils/beneficiaries.ts';
+import { getTodayDfsSlates } from './src/services/slatesService.ts';
 import type { SlateData, Sport, GroundingSource, InjuryAlert } from './src/types/dfs.ts';
 
 dotenv.config();
@@ -74,6 +75,24 @@ app.get('/api/dfs/schedule-overview', async (_req: Request, res: Response) => {
     res.json({
       gameCounts: { nba: 0, nfl: 0, nhl: 0, cbb: 0, cfb: 0, mlb: 0 },
       timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/dfs/today-slates - List all available DraftKings and FanDuel contest slates for today
+app.get('/api/dfs/today-slates', async (_req: Request, res: Response) => {
+  try {
+    const slates = await getTodayDfsSlates();
+    res.json({
+      slates,
+      totalCount: slates.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error loading today DFS slates:', error);
+    res.status(500).json({
+      error: 'Failed to build today DFS slates',
+      slates: [],
     });
   }
 });

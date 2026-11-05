@@ -14,6 +14,9 @@ import { BreakingInjuryBanner } from './components/BreakingInjuryBanner.tsx';
 import { AlertsLogModal } from './components/AlertsLogModal.tsx';
 import { AutoRefreshBar } from './components/AutoRefreshBar.tsx';
 import { InjuryBeneficiariesView } from './components/InjuryBeneficiariesView.tsx';
+import { TodaySlatesView } from './components/TodaySlatesView.tsx';
+import { SlateLineupBuilderModal } from './components/SlateLineupBuilderModal.tsx';
+import type { DfsSlateContest } from './types/slates.ts';
 import { useInjuryPoller } from './hooks/useInjuryPoller.ts';
 import { soundManager } from './utils/audio.ts';
 import { computeAdaptiveRefreshSchedule } from './utils/scheduleTiming.ts';
@@ -33,6 +36,7 @@ import {
   Clock,
   BellRing,
   Zap,
+  Layers,
 } from 'lucide-react';
 
 export default function App() {
@@ -40,12 +44,36 @@ export default function App() {
   const [slates, setSlates] = useState<Record<Sport, SlateData>>(FALLBACK_SLATES);
   const slateData = slates[currentSport];
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'games' | 'values' | 'matchups' | 'beneficiaries' | 'injuries' | 'text'>('games');
+  const [activeTab, setActiveTab] = useState<'slates' | 'games' | 'values' | 'matchups' | 'beneficiaries' | 'injuries' | 'text'>('slates');
+  const [allSlates, setAllSlates] = useState<DfsSlateContest[]>([]);
+  const [isLoadingSlates, setIsLoadingSlates] = useState<boolean>(false);
+  const [selectedSlateForBuilder, setSelectedSlateForBuilder] = useState<DfsSlateContest | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showCopyBoard, setShowCopyBoard] = useState<boolean>(false);
   const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
   const [showAlertsModal, setShowAlertsModal] = useState<boolean>(false);
   const [quickCopied, setQuickCopied] = useState<boolean>(false);
+
+  const fetchTodaySlates = useCallback(async () => {
+    setIsLoadingSlates(true);
+    try {
+      const res = await fetch('/api/dfs/today-slates');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.slates) {
+          setAllSlates(data.slates);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching today DFS slates:', err);
+    } finally {
+      setIsLoadingSlates(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTodaySlates();
+  }, [fetchTodaySlates]);
 
   // Clock tick to re-evaluate schedule window relative to game start times
   const [currentTimeTick, setCurrentTimeTick] = useState<number>(Date.now());
@@ -158,6 +186,7 @@ export default function App() {
           fetchSlate(currentSport, forceLive),
           fetchScheduleOverview(),
           pollInjuries(),
+          fetchTodaySlates(),
         ]);
         const nowStr = new Date().toLocaleTimeString('en-US', {
           hour: 'numeric',
@@ -170,7 +199,7 @@ export default function App() {
         setIsAutoRefreshing(false);
       }
     },
-    [currentSport, fetchSlate, fetchScheduleOverview, pollInjuries, scheduleTiming.intervalSeconds]
+    [currentSport, fetchSlate, fetchScheduleOverview, pollInjuries, fetchTodaySlates, scheduleTiming.intervalSeconds]
   );
 
   // Adaptive Auto-Refresh Countdown Loop:
@@ -387,7 +416,29 @@ export default function App() {
         </div>
 
         {/* Quick Metric Highlights Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+          {/* Today's DFS Slates */}
+          <div
+            onClick={() => setActiveTab('slates')}
+            className={`bg-slate-900/80 rounded-xl border p-2.5 flex items-center gap-2.5 cursor-pointer transition-all ${
+              activeTab === 'slates'
+                ? 'border-emerald-500 shadow-md shadow-emerald-500/10 bg-emerald-950/20'
+                : 'border-emerald-500/30 hover:border-emerald-400'
+            }`}
+          >
+            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[10px] uppercase font-bold text-emerald-300 tracking-wider">
+                Today's Slates
+              </span>
+              <span className="text-sm sm:text-base font-extrabold text-white truncate block">
+                {allSlates.length} Slates (DK/FD)
+              </span>
+            </div>
+          </div>
+
           {/* Total Games */}
           <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-2.5 flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
@@ -486,6 +537,22 @@ export default function App() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
           {/* View Mode Buttons */}
           <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800 overflow-x-auto no-scrollbar">
+            {/* Today's Slates Tab */}
+            <button
+              onClick={() => setActiveTab('slates')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                activeTab === 'slates'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/40 border border-emerald-500/50'
+                  : 'text-emerald-400 hover:text-emerald-300'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Today's Slates ({allSlates.length})</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-950 text-emerald-300 border border-emerald-800">
+                DK & FD
+              </span>
+            </button>
+
             <button
               onClick={() => setActiveTab('games')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
@@ -587,6 +654,16 @@ export default function App() {
             />
           </div>
         </div>
+
+        {/* View Section 0: Today's Slates (DraftKings & FanDuel) */}
+        {activeTab === 'slates' && (
+          <TodaySlatesView
+            slates={allSlates}
+            isLoading={isLoadingSlates}
+            onSelectSlate={(slate) => setSelectedSlateForBuilder(slate)}
+            onRefresh={fetchTodaySlates}
+          />
+        )}
 
         {/* View Section 1: Games & Vegas Odds */}
         {activeTab === 'games' && (
@@ -914,8 +991,27 @@ export default function App() {
         />
       )}
 
+      {/* Slate Lineup Builder Modal with Player Correlation */}
+      {selectedSlateForBuilder && (
+        <SlateLineupBuilderModal
+          slate={selectedSlateForBuilder}
+          isOpen={!!selectedSlateForBuilder}
+          onClose={() => setSelectedSlateForBuilder(null)}
+        />
+      )}
+
       {/* Mobile Sticky Quick Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 py-1.5 px-3 sm:hidden flex items-center justify-around text-[10px]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 py-1.5 px-2 sm:hidden flex items-center justify-around text-[10px]">
+        <button
+          onClick={() => setActiveTab('slates')}
+          className={`flex flex-col items-center gap-0.5 p-1 font-bold ${
+            activeTab === 'slates' ? 'text-emerald-400 font-extrabold' : 'text-slate-400'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-emerald-400" />
+          <span>Slates</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('games')}
           className={`flex flex-col items-center gap-0.5 p-1 font-medium ${
@@ -924,6 +1020,16 @@ export default function App() {
         >
           <Calendar className="w-4 h-4" />
           <span>Vegas</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('beneficiaries')}
+          className={`flex flex-col items-center gap-0.5 p-1 font-medium ${
+            activeTab === 'beneficiaries' ? 'text-indigo-400 font-bold' : 'text-slate-400'
+          }`}
+        >
+          <Zap className="w-4 h-4 text-indigo-400" />
+          <span>Boosts</span>
         </button>
 
         <button
@@ -949,16 +1055,6 @@ export default function App() {
               {unreadCount}
             </span>
           )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('matchups')}
-          className={`flex flex-col items-center gap-0.5 p-1 font-medium ${
-            activeTab === 'matchups' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4" />
-          <span>Matchups</span>
         </button>
 
         <button
