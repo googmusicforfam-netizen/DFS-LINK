@@ -13,9 +13,11 @@ import { AudioUnlockBanner } from './components/AudioUnlockBanner.tsx';
 import { BreakingInjuryBanner } from './components/BreakingInjuryBanner.tsx';
 import { AlertsLogModal } from './components/AlertsLogModal.tsx';
 import { AutoRefreshBar } from './components/AutoRefreshBar.tsx';
+import { InjuryBeneficiariesView } from './components/InjuryBeneficiariesView.tsx';
 import { useInjuryPoller } from './hooks/useInjuryPoller.ts';
 import { soundManager } from './utils/audio.ts';
 import { computeAdaptiveRefreshSchedule } from './utils/scheduleTiming.ts';
+import { extractBeneficiariesFromAlerts } from './utils/beneficiaries.ts';
 import {
   Calendar,
   Flame,
@@ -30,6 +32,7 @@ import {
   AlertTriangle,
   Clock,
   BellRing,
+  Zap,
 } from 'lucide-react';
 
 export default function App() {
@@ -37,7 +40,7 @@ export default function App() {
   const [slates, setSlates] = useState<Record<Sport, SlateData>>(FALLBACK_SLATES);
   const slateData = slates[currentSport];
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'games' | 'values' | 'matchups' | 'injuries' | 'text'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'values' | 'matchups' | 'beneficiaries' | 'injuries' | 'text'>('games');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showCopyBoard, setShowCopyBoard] = useState<boolean>(false);
   const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
@@ -244,6 +247,12 @@ export default function App() {
     );
   });
 
+  // Extract all injury beneficiaries across active alerts
+  const allBeneficiaries = useMemo(() => {
+    return extractBeneficiariesFromAlerts(alerts);
+  }, [alerts]);
+  const totalBeneficiariesCount = allBeneficiaries.length;
+
   // Calculate highest game total
   const highestTotalGame = slateData.games.reduce<typeof slateData.games[0] | null>(
     (highest, current) => {
@@ -278,6 +287,7 @@ export default function App() {
             setShowAlertsModal(true);
             setUnreadCount(0);
           }}
+          onOpenBeneficiaries={() => setActiveTab('beneficiaries')}
         />
       )}
 
@@ -377,7 +387,7 @@ export default function App() {
         </div>
 
         {/* Quick Metric Highlights Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
           {/* Total Games */}
           <div className="bg-slate-900/80 rounded-xl border border-slate-800 p-2.5 flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
@@ -421,6 +431,28 @@ export default function App() {
               </span>
               <span className="text-sm sm:text-base font-extrabold text-emerald-400 truncate block">
                 {topValuePick ? `${topValuePick.playerName} (${topValuePick.valueMultiplier}x)` : 'No Slate'}
+              </span>
+            </div>
+          </div>
+
+          {/* Injury Beneficiaries count */}
+          <div
+            onClick={() => setActiveTab('beneficiaries')}
+            className={`bg-slate-900/80 rounded-xl border p-2.5 flex items-center gap-2.5 cursor-pointer transition-all ${
+              activeTab === 'beneficiaries'
+                ? 'border-indigo-500 shadow-md shadow-indigo-500/10 bg-indigo-950/20'
+                : 'border-indigo-500/30 hover:border-indigo-400'
+            }`}
+          >
+            <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[10px] uppercase font-bold text-indigo-300 tracking-wider">
+                Beneficiaries
+              </span>
+              <span className="text-sm sm:text-base font-extrabold text-white">
+                {totalBeneficiariesCount} Targets
               </span>
             </div>
           </div>
@@ -488,6 +520,28 @@ export default function App() {
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>Matchups ({slateData.matchups.length})</span>
+            </button>
+
+            {/* Injury Beneficiaries Tab */}
+            <button
+              onClick={() => setActiveTab('beneficiaries')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                activeTab === 'beneficiaries'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500/50'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Injury Beneficiaries</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                  activeTab === 'beneficiaries'
+                    ? 'bg-indigo-900/90 text-white'
+                    : 'bg-slate-800 text-indigo-300'
+                }`}
+              >
+                {totalBeneficiariesCount}
+              </span>
             </button>
 
             {/* Injury Alerts Inline Tab */}
@@ -675,6 +729,16 @@ export default function App() {
 
             <MatchupsMatrix matchups={slateData.matchups} />
           </div>
+        )}
+
+        {/* View Section: Injury Beneficiaries */}
+        {activeTab === 'beneficiaries' && (
+          <InjuryBeneficiariesView
+            alerts={alerts}
+            currentSport={currentSport}
+            onSelectSport={handleSelectSport}
+            onSimulateScratch={simulateLateScratch}
+          />
         )}
 
         {/* View Section 4: Injury Wire / Active Out Alerts */}

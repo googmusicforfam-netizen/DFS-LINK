@@ -19,12 +19,14 @@ interface BreakingInjuryBannerProps {
   alert: InjuryAlert;
   onDismiss: () => void;
   onOpenLog: () => void;
+  onOpenBeneficiaries?: () => void;
 }
 
 export const BreakingInjuryBanner: React.FC<BreakingInjuryBannerProps> = ({
   alert,
   onDismiss,
   onOpenLog,
+  onOpenBeneficiaries,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -92,6 +94,15 @@ ${alert.fillIns
                 </>
               )}
             </button>
+
+            {onOpenBeneficiaries && (
+              <button
+                onClick={onOpenBeneficiaries}
+                className="px-2.5 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-all active:scale-95"
+              >
+                <span>Beneficiaries Radar</span>
+              </button>
+            )}
 
             <button
               onClick={onDismiss}

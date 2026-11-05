@@ -58,8 +58,12 @@ export function useInjuryPoller(currentSport: Sport) {
 
   // Dispatch a new breaking out alert (plays loud siren + shows banner)
   const triggerBreakingAlert = useCallback((newAlert: InjuryAlert) => {
-    // 1. Play loud, attention-grabbing alert sound!
-    soundManager.playLoudInjurySiren();
+    // 1. Play alert sound (prefer beneficiary alert fanfare if beneficiaries are flagged and enabled)
+    if (newAlert.fillIns && newAlert.fillIns.length > 0 && soundManager.isBeneficiarySoundEnabled()) {
+      soundManager.playBeneficiaryAlertTone();
+    } else {
+      soundManager.playLoudInjurySiren();
+    }
 
     // 2. Show big top banner
     setActiveBannerAlert(newAlert);

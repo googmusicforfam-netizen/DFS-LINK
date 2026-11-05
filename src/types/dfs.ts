@@ -94,6 +94,7 @@ export interface SlateData {
 }
 
 export type AlertUrgency = 'STANDARD' | 'HIGH' | 'CRITICAL_PRE_LOCK';
+export type BeneficiaryConfidence = 'Lock' | 'Very High' | 'High' | 'Medium';
 
 export interface BeneficiaryPlayer {
   name: string;
@@ -104,6 +105,16 @@ export interface BeneficiaryPlayer {
   salaryDK?: number;
   salaryFD?: number;
   dfsImpactNote: string; // e.g. "Takes over primary playmaking; 28% projected usage"
+  reason?: string;
+  opportunityType?: 'Playing Time' | 'Targets' | 'Touches' | 'Shots' | 'Ice Time';
+  opportunityBoost?: string;
+  opportunityScore?: number;
+  confidenceLevel?: BeneficiaryConfidence;
+  confidencePct?: number;
+  isUnderpriced?: boolean;
+  underpricedTag?: string;
+  projectedPoints?: number;
+  expectedValueMultiplier?: number;
 }
 
 export interface InjuryAlert {
@@ -123,4 +134,43 @@ export interface InjuryAlert {
   createdAt: number;
   urgency: AlertUrgency;
   fillIns: BeneficiaryPlayer[];
+}
+
+export interface InjuryBeneficiary {
+  id: string;
+  alertId: string;
+  sport: Sport;
+  sportName: string;
+  team: string;
+  teamAbbr: string;
+  
+  // Injured player details
+  injuredPlayer: string;
+  injuredPosition: string;
+  injuryDetail: string;
+  officialStatus: 'OUT' | 'LATE SCRATCH' | 'INACTIVE' | 'DNP';
+  gameMatchup: string;
+  gameTime: string;
+  
+  // Beneficiary details
+  beneficiaryName: string;
+  position: string;
+  role: 'New Starter' | 'Next Man Up' | 'Usage Monster' | 'Expanded Minutes' | 'Punt Salary Saver';
+  reason: string; // short reason (extra playing time, targets, touches, shots, or ice time)
+  opportunityType: 'Playing Time' | 'Targets' | 'Touches' | 'Shots' | 'Ice Time';
+  opportunityBoost: string; // e.g. "+14 Mins (+32% Usage)"
+  opportunityScore: number; // 0-100 for ranking by expected increase in opportunity
+  confidenceLevel: BeneficiaryConfidence;
+  confidencePct: number; // e.g. 95%
+  
+  // DFS Salaries & Value
+  salaryDK: number;
+  salaryFD: number;
+  projectedPoints: number;
+  expectedValueMultiplier: number;
+  isUnderpriced: boolean; // highlighted as value play
+  underpricedTag?: string;
+  
+  timestamp: string;
+  createdAt: number;
 }

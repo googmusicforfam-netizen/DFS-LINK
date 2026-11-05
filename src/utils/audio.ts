@@ -7,6 +7,7 @@
 class SoundAlertManager {
   private audioCtx: AudioContext | null = null;
   private soundEnabled: boolean = true;
+  private beneficiarySoundEnabled: boolean = true;
   private isUnlocked: boolean = false;
   private currentSirenNodes: { stop: () => void }[] = [];
 
@@ -14,6 +15,9 @@ class SoundAlertManager {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('dfs_sound_alerts_enabled');
       this.soundEnabled = stored !== null ? stored === 'true' : true;
+
+      const storedBeneficiary = localStorage.getItem('dfs_beneficiary_sound_alerts_enabled');
+      this.beneficiarySoundEnabled = storedBeneficiary !== null ? storedBeneficiary === 'true' : true;
 
       // Listen for initial user interaction to unlock audio
       const unlockHandler = () => {
@@ -85,6 +89,63 @@ class SoundAlertManager {
     const next = !this.soundEnabled;
     this.setEnabled(next);
     return next;
+  }
+
+  public isBeneficiarySoundEnabled(): boolean {
+    return this.beneficiarySoundEnabled;
+  }
+
+  public setBeneficiarySoundEnabled(enabled: boolean): void {
+    this.beneficiarySoundEnabled = enabled;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dfs_beneficiary_sound_alerts_enabled', String(enabled));
+    }
+    if (enabled) {
+      this.playBeneficiaryAlertTone();
+    }
+  }
+
+  public toggleBeneficiarySound(): boolean {
+    const next = !this.beneficiarySoundEnabled;
+    this.setBeneficiarySoundEnabled(next);
+    return next;
+  }
+
+  /**
+   * ⚡ BENEFICIARY ALERT SOUND
+   * An energetic 4-note ascending fanfare chime with harmonics
+   * signaling a new injury beneficiary opportunity has been flagged.
+   */
+  public playBeneficiaryAlertTone(): void {
+    if (!this.beneficiarySoundEnabled) return;
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      // Ascending fanfare chords: F5 (698.46Hz), A5 (880Hz), C6 (1046.5Hz), E6 (1318.51Hz)
+      const notes = [698.46, 880.0, 1046.5, 1318.51];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + idx * 0.08;
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, start);
+
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(0.25, start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.38);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(start);
+        osc.stop(start + 0.4);
+      });
+    } catch (e) {
+      console.warn('Could not play beneficiary alert sound:', e);
+    }
   }
 
   /**

@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 import { FALLBACK_SLATES } from './src/data/fallbackSlates.ts';
 import { INITIAL_INJURY_ALERTS, DYNAMIC_INJURY_POOL } from './src/data/fallbackInjuries.ts';
 import { fetchEspnSlate, fetchTodayGameCounts } from './src/services/espnService.ts';
+import { extractBeneficiariesFromAlerts, filterBeneficiariesBySport, getBeneficiaryCountsBySport } from './src/utils/beneficiaries.ts';
 import type { SlateData, Sport, GroundingSource, InjuryAlert } from './src/types/dfs.ts';
 
 dotenv.config();
@@ -266,6 +267,28 @@ Output JSON:
 
 // Injury Alerts state in memory
 let activeInjuryAlerts: InjuryAlert[] = [...INITIAL_INJURY_ALERTS];
+
+// GET /api/dfs/beneficiaries - Retrieve ranked injury beneficiaries across sports with filter
+app.get('/api/dfs/beneficiaries', (req: Request, res: Response) => {
+  const sportParam = (req.query.sport as string)?.toLowerCase();
+  const allBeneficiaries = extractBeneficiariesFromAlerts(activeInjuryAlerts);
+  
+  const sportFilter = ['nba', 'nfl', 'mlb', 'nhl', 'cfb', 'cbb'].includes(sportParam)
+    ? (sportParam as Sport)
+    : 'all';
+
+  const filtered = filterBeneficiariesBySport(allBeneficiaries, sportFilter);
+  const countsBySport = getBeneficiaryCountsBySport(allBeneficiaries);
+  const underpricedCount = filtered.filter((b) => b.isUnderpriced).length;
+
+  res.json({
+    beneficiaries: filtered,
+    totalCount: filtered.length,
+    underpricedCount,
+    countsBySport,
+    lastUpdated: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }),
+  });
+});
 
 // GET /api/dfs/injuries - Retrieve current injury alerts & pre-lock status
 app.get('/api/dfs/injuries', (req: Request, res: Response) => {
