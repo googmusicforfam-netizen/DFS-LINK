@@ -27,12 +27,15 @@ import {
   AlertTriangle,
   Play,
 } from 'lucide-react';
+import { StarButton } from './StarButton.tsx';
 
 interface InjuryBeneficiariesViewProps {
   alerts: InjuryAlert[];
   currentSport: Sport;
   onSelectSport?: (sport: Sport) => void;
   onSimulateScratch?: (sport: Sport) => void;
+  isStarred?: (name: string) => boolean;
+  onToggleStar?: (player: any) => void;
 }
 
 type SportFilter = Sport | 'all';
@@ -43,6 +46,8 @@ export const InjuryBeneficiariesView: React.FC<InjuryBeneficiariesViewProps> = (
   currentSport,
   onSelectSport,
   onSimulateScratch,
+  isStarred,
+  onToggleStar,
 }) => {
   // Sport filter state with option for 'all' sports at once
   const [selectedSport, setSelectedSport] = useState<SportFilter>('all');
@@ -547,7 +552,28 @@ export const InjuryBeneficiariesView: React.FC<InjuryBeneficiariesViewProps> = (
 
                   {/* Beneficiary Name & Position */}
                   <div>
-                    <div className="flex items-baseline gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {onToggleStar && (
+                        <StarButton
+                          isStarred={isStarred ? isStarred(b.beneficiaryName) : false}
+                          onToggle={() =>
+                            onToggleStar({
+                              name: b.beneficiaryName,
+                              position: b.position,
+                              team: b.team,
+                              teamAbbr: b.teamAbbr,
+                              sport: b.sport,
+                              salaryDK: b.salaryDK,
+                              salaryFD: b.salaryFD,
+                              status: 'BENEFICIARY',
+                              beneficiaryNote: `${b.opportunityBoost}: ${b.reason}`,
+                              gameMatchup: b.gameMatchup,
+                              gameTime: b.gameTime,
+                            })
+                          }
+                          size="sm"
+                        />
+                      )}
                       <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
                         {b.beneficiaryName}
                       </h3>

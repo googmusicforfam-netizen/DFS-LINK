@@ -30,17 +30,22 @@ import {
   ArrowRight,
   UserCheck,
 } from 'lucide-react';
+import { StarButton } from './StarButton.tsx';
 
 interface SlateLineupBuilderModalProps {
   slate: DfsSlateContest;
   isOpen: boolean;
   onClose: () => void;
+  isStarred?: (name: string) => boolean;
+  onToggleStar?: (player: any) => void;
 }
 
 export function SlateLineupBuilderModal({
   slate,
   isOpen,
   onClose,
+  isStarred,
+  onToggleStar,
 }: SlateLineupBuilderModalProps) {
   // Initialize roster slots based on the contest format
   const initialSlots: LineupSlotItem[] = useMemo(() => {
@@ -815,6 +820,24 @@ export function SlateLineupBuilderModal({
                         {/* Player Info */}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {onToggleStar && (
+                              <StarButton
+                                isStarred={isStarred ? isStarred(p.name) : false}
+                                onToggle={() =>
+                                  onToggleStar({
+                                    name: p.name,
+                                    position: p.position,
+                                    team: p.team,
+                                    sport: p.sport,
+                                    salaryDK: p.salaryDK,
+                                    salaryFD: p.salaryFD,
+                                    gameMatchup: p.gameMatchup,
+                                    gameTime: p.gameTime,
+                                  })
+                                }
+                                size="sm"
+                              />
+                            )}
                             <span className="font-bold text-white text-sm hover:text-amber-400 transition-colors">
                               {p.name}
                             </span>

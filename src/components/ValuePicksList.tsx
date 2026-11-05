@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { ValuePick, ValueTier } from '../types/dfs';
+import type { ValuePick, ValueTier, Sport } from '../types/dfs.ts';
 import { ShieldAlert, TrendingUp, Copy, Check, Flame, Award, DollarSign, Target } from 'lucide-react';
-import { soundManager } from '../utils/audio';
+import { soundManager } from '../utils/audio.ts';
+import { StarButton } from './StarButton.tsx';
 
 interface ValuePicksListProps {
   picks: ValuePick[];
   sport: string;
+  isStarred?: (name: string) => boolean;
+  onToggleStar?: (player: any) => void;
 }
 
-export const ValuePicksList: React.FC<ValuePicksListProps> = ({ picks, sport }) => {
+export const ValuePicksList: React.FC<ValuePicksListProps> = ({
+  picks,
+  sport,
+  isStarred,
+  onToggleStar,
+}) => {
   const [selectedPosition, setSelectedPosition] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -125,6 +133,22 @@ export const ValuePicksList: React.FC<ValuePicksListProps> = ({ picks, sport }) 
 
                   <div className="shrink-0 flex items-center gap-1.5">
                     {getTierBadge(pick.tier)}
+                    {onToggleStar && (
+                      <StarButton
+                        isStarred={isStarred ? isStarred(pick.playerName) : false}
+                        onToggle={() =>
+                          onToggleStar({
+                            name: pick.playerName,
+                            position: pick.position,
+                            team: pick.team,
+                            sport: (sport.toLowerCase() as any) || 'nba',
+                            salaryDK: pick.salaryDK,
+                            salaryFD: pick.salaryFD,
+                          })
+                        }
+                        size="sm"
+                      />
+                    )}
                   </div>
                 </div>
 

@@ -18,6 +18,9 @@ import { TodaySlatesView } from './components/TodaySlatesView.tsx';
 import { SlateLineupBuilderModal } from './components/SlateLineupBuilderModal.tsx';
 import type { DfsSlateContest } from './types/slates.ts';
 import { useInjuryPoller } from './hooks/useInjuryPoller.ts';
+import { useWatchlist } from './hooks/useWatchlist.ts';
+import { WatchlistModal } from './components/WatchlistModal.tsx';
+import { WatchlistToastBanner } from './components/WatchlistToastBanner.tsx';
 import { soundManager } from './utils/audio.ts';
 import { computeAdaptiveRefreshSchedule } from './utils/scheduleTiming.ts';
 import { extractBeneficiariesFromAlerts } from './utils/beneficiaries.ts';
@@ -37,6 +40,7 @@ import {
   BellRing,
   Zap,
   Layers,
+  Star,
 } from 'lucide-react';
 
 export default function App() {
@@ -52,7 +56,27 @@ export default function App() {
   const [showCopyBoard, setShowCopyBoard] = useState<boolean>(false);
   const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
   const [showAlertsModal, setShowAlertsModal] = useState<boolean>(false);
+  const [showWatchlistModal, setShowWatchlistModal] = useState<boolean>(false);
   const [quickCopied, setQuickCopied] = useState<boolean>(false);
+
+  // Player Watchlist Hook (browser notifications, starred players, price changes)
+  const {
+    watchlist,
+    isStarred,
+    toggleStar,
+    removePlayer,
+    clearAllWatchlist,
+    notificationHistory,
+    clearNotificationHistory,
+    browserPermission,
+    requestPermission,
+    checkWatchlistInjuries,
+    simulatePriceChange,
+    simulateWatchlistInjury,
+    sendTestNotification,
+    lastNotificationAlert,
+    dismissNotificationAlert,
+  } = useWatchlist();
 
   const fetchTodaySlates = useCallback(async () => {
     setIsLoadingSlates(true);
@@ -122,6 +146,13 @@ export default function App() {
     clearAlertsLog,
     pollInjuries,
   } = useInjuryPoller(currentSport);
+
+  // Check starred watchlist players against incoming injury alerts for immediate browser notifications
+  useEffect(() => {
+    if (alerts.length > 0) {
+      checkWatchlistInjuries(alerts);
+    }
+  }, [alerts, checkWatchlistInjuries]);
 
   // Game counts from ESPN scoreboard for today
   const [todayGameCounts, setTodayGameCounts] = useState<Record<Sport, number>>({
@@ -320,6 +351,15 @@ export default function App() {
         />
       )}
 
+      {/* Watchlist Real-Time Toast Banner */}
+      {lastNotificationAlert && (
+        <WatchlistToastBanner
+          alert={lastNotificationAlert}
+          onDismiss={dismissNotificationAlert}
+          onOpenWatchlist={() => setShowWatchlistModal(true)}
+        />
+      )}
+
       {/* App Header */}
       <Header
         onRefresh={handleRefresh}
@@ -330,6 +370,8 @@ export default function App() {
           setShowAlertsModal(true);
           setUnreadCount(0);
         }}
+        onOpenWatchlist={() => setShowWatchlistModal(true)}
+        watchlistCount={watchlist.length}
         unreadAlertsCount={unreadCount}
         lastUpdated={`Live Synced at ${lastUpdatedTime}`}
       />
@@ -611,6 +653,18 @@ export default function App() {
               </span>
             </button>
 
+            {/* Player Watchlist Tab */}
+            <button
+              onClick={() => setShowWatchlistModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-all active:scale-95"
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span>Watchlist</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-slate-950">
+                {watchlist.length}
+              </span>
+            </button>
+
             {/* Injury Alerts Inline Tab */}
             <button
               onClick={() => setActiveTab('injuries')}
@@ -782,7 +836,12 @@ export default function App() {
               </span>
             </div>
 
-            <ValuePicksList picks={filteredValuePicks} sport={slateData.sport} />
+            <ValuePicksList
+              picks={filteredValuePicks}
+              sport={slateData.sport}
+              isStarred={isStarred}
+              onToggleStar={toggleStar}
+            />
 
             {filteredValuePicks.length === 0 && (
               <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-8 text-center text-slate-400 text-xs">
@@ -815,6 +874,8 @@ export default function App() {
             currentSport={currentSport}
             onSelectSport={handleSelectSport}
             onSimulateScratch={simulateLateScratch}
+            isStarred={isStarred}
+            onToggleStar={toggleStar}
           />
         )}
 
@@ -997,6 +1058,25 @@ export default function App() {
           slate={selectedSlateForBuilder}
           isOpen={!!selectedSlateForBuilder}
           onClose={() => setSelectedSlateForBuilder(null)}
+          isStarred={isStarred}
+          onToggleStar={toggleStar}
+        />
+      )}
+
+      {/* Starred Players Watchlist Modal */}
+      {showWatchlistModal && (
+        <WatchlistModal
+          watchlist={watchlist}
+          notificationHistory={notificationHistory}
+          browserPermission={browserPermission}
+          onRequestPermission={requestPermission}
+          onRemovePlayer={removePlayer}
+          onClearAll={clearAllWatchlist}
+          onClearHistory={clearNotificationHistory}
+          onSimulateInjury={simulateWatchlistInjury}
+          onSimulatePriceChange={simulatePriceChange}
+          onSendTestNotification={sendTestNotification}
+          onClose={() => setShowWatchlistModal(false)}
         />
       )}
 
@@ -1010,6 +1090,14 @@ export default function App() {
         >
           <Layers className="w-4 h-4 text-emerald-400" />
           <span>Slates</span>
+        </button>
+
+        <button
+          onClick={() => setShowWatchlistModal(true)}
+          className="flex flex-col items-center gap-0.5 p-1 font-bold text-amber-400"
+        >
+          <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+          <span>Watch ({watchlist.length})</span>
         </button>
 
         <button
@@ -1030,16 +1118,6 @@ export default function App() {
         >
           <Zap className="w-4 h-4 text-indigo-400" />
           <span>Boosts</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('values')}
-          className={`flex flex-col items-center gap-0.5 p-1 font-medium ${
-            activeTab === 'values' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <Award className="w-4 h-4" />
-          <span>Values</span>
         </button>
 
         <button

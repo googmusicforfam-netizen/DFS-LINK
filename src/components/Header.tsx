@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, RefreshCw, FileText, Sparkles, ShieldCheck } from 'lucide-react';
+import { Volume2, VolumeX, RefreshCw, FileText, Sparkles, ShieldCheck, Star } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
 interface HeaderProps {
@@ -8,6 +8,8 @@ interface HeaderProps {
   onOpenPasteModal: () => void;
   onOpenCopyBoard: () => void;
   onOpenAlertsLog: () => void;
+  onOpenWatchlist?: () => void;
+  watchlistCount?: number;
   unreadAlertsCount: number;
   lastUpdated: string;
 }
@@ -18,6 +20,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPasteModal,
   onOpenCopyBoard,
   onOpenAlertsLog,
+  onOpenWatchlist,
+  watchlistCount,
   unreadAlertsCount,
   lastUpdated,
 }) => {
@@ -59,6 +63,24 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Watchlist button */}
+            {onOpenWatchlist && (
+              <button
+                onClick={onOpenWatchlist}
+                title="View starred players watchlist and browser alerts"
+                aria-label="View watchlist"
+                className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+              >
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="hidden sm:inline">Watchlist</span>
+                {(watchlistCount ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                    {watchlistCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Injury Wire Alert Log button */}
             <button
               onClick={onOpenAlertsLog}
